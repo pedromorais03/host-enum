@@ -28,5 +28,5 @@ nmap -sn $NETWORK | grep "Nmap scan report for" | awk '{print $5}' > active_host
 if [ -s active_hosts.txt ]; then
     echo "Nmap has detect active hosts. Please check'em in active_hosts.txt"
 else
-    echo "No file found!"
+    echo "No file found!!"
 fi
