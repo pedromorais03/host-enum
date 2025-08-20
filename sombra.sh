@@ -1,331 +1,295 @@
 #!/bin/bash
 
 #################################################
-# 💜 SOMBRA - Network Infiltrator
-# Author: [m0uras]
-# Version: 2.0
-# Description: "Everything can be hacked... and everyone."
-#              Advanced network reconnaissance and host discovery tool
-# Usage: ./sombra.sh <network_cidr> [options]
+# 💜 SOMBRA - Reconnaissance Orchestrator v3.0
+# Author: [Seu Nome]
+# Description: Intelligent reconnaissance automation
+# Usage: ./sombra.sh <target> [options]
 #################################################
 
-# Color codes for better output (Sombra themed)
 readonly RED='\033[0;31m'
 readonly GREEN='\033[0;32m'
 readonly YELLOW='\033[1;33m'
 readonly BLUE='\033[0;34m'
-readonly PURPLE='\033[0;35m'      
-readonly CYAN='\033[0;36m'        
-readonly MAGENTA='\033[1;35m'     
-readonly GRAY='\033[0;37m'        
+readonly PURPLE='\033[0;35m'
+readonly CYAN='\033[0;36m'
+readonly MAGENTA='\033[1;35m'
+readonly GRAY='\033[0;37m'
 readonly NC='\033[0m'
 
-# Configuration variables
-readonly SCRIPT_NAME=$(basename "$0")
-readonly TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-readonly OUTPUT_DIR="scan_results_${TIMESTAMP}"
-readonly HOSTS_FILE="${OUTPUT_DIR}/active_hosts.txt"
-readonly LOG_FILE="${OUTPUT_DIR}/scan.log"
+SCRIPT_NAME=$(basename "$0")
+TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+OUTPUT_DIR="sombra_recon_${TIMESTAMP}"
+RESULTS_DIR="${OUTPUT_DIR}/results"
+REPORTS_DIR="${OUTPUT_DIR}/reports"
+EVIDENCE_DIR="${OUTPUT_DIR}/evidence"
 
-# Default values
+AGGRESSIVE_MODE=false
+STEALTH_MODE=false
 VERBOSE=false
-FAST_SCAN=false
-OUTPUT_FORMAT="txt"
+TARGET=""
+
+RUN_DISCOVERY=true
+RUN_SERVICE_DETECTION=true
+RUN_SMART_TESTING=true
+RUN_VULN_SCAN=true
+RUN_REPORT=true
+
+TEST_HTTP=true
+TEST_SSH=true
+TEST_FTP=true
+TEST_SMB=true
+TEST_DNS=true
+TEST_DATABASE=true
 
 #################################################
-# Functions
+# Service testing rules (Bash 3.2 compatible)
 #################################################
-
-# Print colored messages (Sombra themed)
-print_error() {
-    echo -e "${RED}[ERROR]${NC} $1" >&2
+get_service_test() {
+    local port=$1
+    case $port in
+        80) echo "http_tests" ;;
+        443|8443) echo "https_tests" ;;
+        21) echo "ftp_tests" ;;
+        22) echo "ssh_tests" ;;
+        23) echo "telnet_tests" ;;
+        25) echo "smtp_tests" ;;
+        53) echo "dns_tests" ;;
+        110) echo "pop3_tests" ;;
+        143) echo "imap_tests" ;;
+        445) echo "smb_tests" ;;
+        993) echo "imaps_tests" ;;
+        995) echo "pop3s_tests" ;;
+        1433) echo "mssql_tests" ;;
+        3306) echo "mysql_tests" ;;
+        5432) echo "postgresql_tests" ;;
+        6379) echo "redis_tests" ;;
+        *) echo "" ;;
+    esac
 }
 
-print_success() {
-    echo -e "${CYAN}[SUCCESS]${NC} $1"
+#################################################
+# Core Functions
+#################################################
+print_banner() {
+    echo -e "${PURPLE}\
+   ███████  ██████  ███    ███ ██████  ██████   █████  
+   ██      ██    ██ ████  ████ ██   ██ ██   ██ ██   ██ 
+   ███████ ██    ██ ██ ████ ██ ██████  ██████  ███████ 
+        ██ ██    ██ ██  ██  ██ ██   ██ ██   ██ ██   ██ 
+   ███████  ██████  ██      ██ ██████  ██   ██ ██   ██ 
+   R E C O N N A I S S A N C E   O R C H E S T R A T O R${NC}
+${CYAN}\"Heh, did I scare you?\"${NC}\n"
 }
 
-print_warning() {
-    echo -e "${MAGENTA}[WARNING]${NC} $1"
-}
 
-print_info() {
-    echo -e "${PURPLE}[INFO]${NC} $1"
-}
+print_error() { echo -e "${RED}[ERROR]${NC} $1" >&2; }
+print_success() { echo -e "${CYAN}[SUCCESS]${NC} $1"; }
+print_warning() { echo -e "${MAGENTA}[WARNING]${NC} $1"; }
+print_info() { echo -e "${PURPLE}[INFO]${NC} $1"; }
+print_hack() { echo -e "${CYAN}[HACKING]${NC} $1"; }
+print_vuln() { echo -e "${RED}[VULN]${NC} $1"; }
 
-print_hack() {
-    echo -e "${CYAN}[HACKING]${NC} $1"
-}
-
-# Logging function
 log_message() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "${OUTPUT_DIR}/orchestrator.log"
 }
 
-# Display help
 show_help() {
-    echo -e "${PURPLE}💜 SOMBRA - Network Infiltrator v2.0${NC}"
-    echo -e "${CYAN}\"Everything can be hacked... and everyone.\"${NC}"
-    echo
+    echo -e "${PURPLE}💜 SOMBRA - Reconnaissance Orchestrator v3.0${NC}\n"
+
     echo -e "${MAGENTA}USAGE:${NC}"
-    echo "    $SCRIPT_NAME <network_cidr> [options]"
-    echo
+    echo -e "    $SCRIPT_NAME <target> [options]\n"
+
     echo -e "${MAGENTA}ARGUMENTS:${NC}"
-    echo "    network_cidr    Network in CIDR notation (e.g., 192.168.1.0/24)"
-    echo
-    echo -e "${MAGENTA}OPTIONS:${NC}"
-    echo "    -v, --verbose   Enable verbose output"
-    echo "    -f, --fast      Use fast scan mode (less comprehensive)"
-    echo "    -o, --output    Output format: txt, csv, json (default: txt)"
-    echo "    -h, --help      Show this help message"
-    echo
+    echo -e "    target          Single IP, hostname, or CIDR network\n"
+
+    echo -e "${MAGENTA}SCAN MODE OPTIONS:${NC}"
+    echo -e "    -a, --aggressive    Aggressive scanning mode (faster, noisier)"
+    echo -e "    -s, --stealth       Stealth mode (slower, quieter)"
+    echo -e "    -v, --verbose       Enable verbose output\n"
+
+    echo -e "${MAGENTA}PHASE CONTROL OPTIONS:${NC}"
+    echo -e "    --no-discovery      Skip port discovery phase"
+    echo -e "    --no-services       Skip service detection phase"
+    echo -e "    --no-testing        Skip smart service testing phase"
+    echo -e "    --no-vulns          Skip vulnerability scanning phase"
+    echo -e "    --no-report         Skip report generation\n"
+
+    echo -e "${MAGENTA}SERVICE TESTING OPTIONS:${NC}"
+    echo -e "    --no-http           Skip HTTP/HTTPS testing"
+    echo -e "    --no-ssh            Skip SSH testing"
+    echo -e "    --no-ftp            Skip FTP testing"
+    echo -e "    --no-smb            Skip SMB testing"
+    echo -e "    --no-dns            Skip DNS testing"
+    echo -e "    --no-database       Skip database testing\n"
+
+    echo -e "${MAGENTA}OUTPUT OPTIONS:${NC}"
+    echo -e "    -o, --output-dir    Custom output directory name"
+    echo -e "    --json              Generate JSON report additionally"
+    echo -e "    --xml               Generate XML report additionally\n"
+
     echo -e "${MAGENTA}EXAMPLES:${NC}"
-    echo "    $SCRIPT_NAME 192.168.1.0/24"
-    echo "    $SCRIPT_NAME 10.0.0.0/8 --verbose --fast"
-    echo "    $SCRIPT_NAME 172.16.0.0/12 -o csv"
-    echo
-    echo -e "${MAGENTA}OUTPUT:${NC}"
-    echo "    Results are saved in: ${OUTPUT_DIR}/"
-    echo "    - active_hosts.txt: List of discovered hosts"
-    echo "    - scan.log: Detailed scan log"
-}
-
-
-# Validate dependencies
-check_dependencies() {
-    local deps=("nmap" "awk" "grep")
-    local missing_deps=()
-    
-    for dep in "${deps[@]}"; do
-        if ! command -v "$dep" &> /dev/null; then
-            missing_deps+=("$dep")
-        fi
-    done
-    
-    if [ ${#missing_deps[@]} -ne 0 ]; then
-        print_error "Missing dependencies: ${missing_deps[*]}"
-        print_info "Please install missing tools and try again"
-        exit 1
-    fi
-}
-
-# Validate CIDR notation
-validate_cidr() {
-    local network="$1"
-    
-    # Enhanced regex for CIDR validation
-    if [[ ! "$network" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}$ ]]; then
-        print_error "Invalid CIDR notation: $network"
-        print_info "Please use format: x.x.x.x/y (e.g., 192.168.1.0/24)"
-        return 1
-    fi
-    
-    # Validate IP octets (0-255) and subnet mask (0-32)
-    IFS='/' read -r ip mask <<< "$network"
-    IFS='.' read -ra octets <<< "$ip"
-    
-    for octet in "${octets[@]}"; do
-        if [ "$octet" -lt 0 ] || [ "$octet" -gt 255 ]; then
-            print_error "Invalid IP address in CIDR: $network"
-            return 1
-        fi
-    done
-    
-    if [ "$mask" -lt 0 ] || [ "$mask" -gt 32 ]; then
-        print_error "Invalid subnet mask in CIDR: $network (must be 0-32)"
-        return 1
-    fi
-    
-    return 0
-}
-
-# Create output directory
-setup_output_dir() {
-    if ! mkdir -p "$OUTPUT_DIR"; then
-        print_error "Failed to create output directory: $OUTPUT_DIR"
-        exit 1
-    fi
-    log_message "Created output directory: $OUTPUT_DIR"
-}
-
-# Perform host discovery
-discover_hosts() {
-    local network="$1"
-    local nmap_opts="-sn"
-    
-    if [ "$FAST_SCAN" = true ]; then
-        nmap_opts+=" -T4 --min-parallelism 100"
-        print_hack "Initiating fast infiltration mode..."
-    else
-        nmap_opts+=" -T3"
-    fi
-    
-    print_hack "Infiltrating network: $network"
-    print_info "Scanning for vulnerable targets..."
-    log_message "Starting nmap scan: nmap $nmap_opts $network"
-    
-    # Execute nmap scan
-    if [ "$VERBOSE" = true ]; then
-        nmap $nmap_opts "$network" | tee >(grep "Nmap scan report for" | awk '{print $5}' > "$HOSTS_FILE")
-    else
-        nmap $nmap_opts "$network" > "${OUTPUT_DIR}/raw_scan.txt" 2>&1
-        grep "Nmap scan report for" "${OUTPUT_DIR}/raw_scan.txt" | awk '{print $5}' > "$HOSTS_FILE"
-    fi
-    
-    local exit_code=${PIPESTATUS[0]}
-    if [ $exit_code -ne 0 ]; then
-        print_error "Nmap scan failed with exit code: $exit_code"
-        log_message "Nmap scan failed with exit code: $exit_code"
-        return 1
-    fi
-}
-
-# Process and format results
-process_results() {
-    local host_count
-    
-    if [ ! -f "$HOSTS_FILE" ] || [ ! -s "$HOSTS_FILE" ]; then
-        print_warning "No targets detected... they're good at hiding"
-        log_message "No active hosts found"
-        return 1
-    fi
-    
-    host_count=$(wc -l < "$HOSTS_FILE")
-    print_success "Hacked into $host_count target(s) successfully!"
-    print_info "All systems compromised and catalogued"
-    log_message "Found $host_count active hosts"
-    
-    # Generate additional output formats
-    case "$OUTPUT_FORMAT" in
-        "csv")
-            {
-                echo "IP_Address,Scan_Time"
-                while read -r host; do
-                    echo "$host,$TIMESTAMP"
-                done < "$HOSTS_FILE"
-            } > "${OUTPUT_DIR}/active_hosts.csv"
-            print_info "CSV output saved to: ${OUTPUT_DIR}/active_hosts.csv"
-            ;;
-        "json")
-            {
-                echo "{"
-                echo "  \"scan_info\": {"
-                echo "    \"timestamp\": \"$TIMESTAMP\","
-                echo "    \"network\": \"$1\","
-                echo "    \"host_count\": $host_count"
-                echo "  },"
-                echo "  \"hosts\": ["
-                local first=true
-                while read -r host; do
-                    if [ "$first" = true ]; then
-                        first=false
-                    else
-                        echo ","
-                    fi
-                    echo -n "    \"$host\""
-                done < "$HOSTS_FILE"
-                echo ""
-                echo "  ]"
-                echo "}"
-            } > "${OUTPUT_DIR}/active_hosts.json"
-            print_info "JSON output saved to: ${OUTPUT_DIR}/active_hosts.json"
-            ;;
-    esac
-    
-    print_info "Results saved to: $OUTPUT_DIR"
-    
-    # Display first few hosts if verbose
-    if [ "$VERBOSE" = true ] && [ "$host_count" -gt 0 ]; then
-        print_info "First 10 compromised targets:"
-        head -10 "$HOSTS_FILE" | while read -r host; do
-            echo -e "  ${CYAN}→${NC} $host ${GRAY}[HACKED]${NC}"
-        done
-    fi
-}
-
-# Cleanup function
-cleanup() {
-    log_message "Script execution completed"
-    if [ "$VERBOSE" = true ]; then
-        print_info "Scan completed. Check $OUTPUT_DIR for detailed results"
-    fi
+    echo -e "    # Full scan"
+    echo -e "    $SCRIPT_NAME 192.168.1.100\n"
+    echo -e "    # Only port discovery and services"
+    echo -e "    $SCRIPT_NAME target.com --only-services\n"
 }
 
 #################################################
-# Main Script Logic
+# Setup directories
 #################################################
+setup_directories() {
+    mkdir -p "$RESULTS_DIR" "$REPORTS_DIR" "$EVIDENCE_DIR"
+    log_message "Created directories: $OUTPUT_DIR"
+}
 
-# Parse command line arguments
-while [[ $# -gt 0 ]]; do
-    case $1 in
-        -v|--verbose)
-            VERBOSE=true
-            shift
-            ;;
-        -f|--fast)
-            FAST_SCAN=true
-            shift
-            ;;
-        -o|--output)
-            OUTPUT_FORMAT="$2"
-            if [[ ! "$OUTPUT_FORMAT" =~ ^(txt|csv|json)$ ]]; then
-                print_error "Invalid output format: $OUTPUT_FORMAT"
-                print_info "Supported formats: txt, csv, json"
-                exit 1
-            fi
-            shift 2
-            ;;
-        -h|--help)
-            show_help
-            exit 0
-            ;;
-        -*)
-            print_error "Unknown option: $1"
-            show_help
-            exit 1
-            ;;
-        *)
-            if [ -z "$NETWORK" ]; then
-                NETWORK="$1"
-            else
-                print_error "Too many arguments"
-                show_help
-                exit 1
-            fi
-            shift
-            ;;
-    esac
-done
+#################################################
+# Phase 1: Port Discovery
+#################################################
+port_discovery() {
+    print_info "Running port discovery on $TARGET..."
+    log_message "Phase: Port Discovery"
+    nmap -Pn -p- "$TARGET" -oN "${RESULTS_DIR}/ports.txt"
+}
 
-# Check if network argument is provided
-if [ -z "$NETWORK" ]; then
-    print_error "Network argument is required"
+#################################################
+# Phase 2: Service Detection
+#################################################
+service_detection() {
+    print_info "Detecting services on discovered ports..."
+    log_message "Phase: Service Detection"
+    nmap -sV "$TARGET" -oN "${RESULTS_DIR}/services.txt"
+}
+
+#################################################
+# Phase 3: Smart Testing
+#################################################
+smart_testing() {
+    print_info "Running smart service-specific tests..."
+    log_message "Phase: Smart Testing"
+
+    # Read ports from services.txt
+    ports=$(grep -Eo '^[0-9]+/tcp' "${RESULTS_DIR}/services.txt" | cut -d'/' -f1)
+
+    for port in $ports; do
+        test_function=$(get_service_test "$port")
+        if [[ -n "$test_function" ]]; then
+            $test_function "$TARGET" "$port"
+        fi
+    done
+}
+
+# Example test functions (HTTP, SSH, FTP, SMB)
+http_tests() {
+    [[ "$TEST_HTTP" == true ]] || return
+    local target=$1; local port=$2
+    print_hack "Testing HTTP on $target:$port..."
+    curl -k -I "$target:$port" -m 5 >> "${RESULTS_DIR}/http_${port}.txt" 2>/dev/null
+}
+
+ssh_tests() {
+    [[ "$TEST_SSH" == true ]] || return
+    local target=$1; local port=$2
+    print_hack "Testing SSH on $target:$port..."
+    nc -zv "$target" "$port" 2>&1 | tee -a "${RESULTS_DIR}/ssh_${port}.txt"
+}
+
+ftp_tests() {
+    [[ "$TEST_FTP" == true ]] || return
+    local target=$1; local port=$2
+    print_hack "Testing FTP on $target:$port..."
+    nc -zv "$target" "$port" 2>&1 | tee -a "${RESULTS_DIR}/ftp_${port}.txt"
+}
+
+smb_tests() {
+    [[ "$TEST_SMB" == true ]] || return
+    local target=$1; local port=$2
+    print_hack "Testing SMB on $target:$port..."
+    smbclient -L "$target" -p "$port" -N >> "${RESULTS_DIR}/smb_${port}.txt" 2>/dev/null
+}
+
+dns_tests() {
+    [[ "$TEST_DNS" == true ]] || return
+    local target=$1; local port=$2
+    print_hack "Testing DNS on $target:$port..."
+    dig @"$target" >> "${RESULTS_DIR}/dns_${port}.txt"
+}
+
+database_tests() {
+    [[ "$TEST_DATABASE" == true ]] || return
+    local target=$1; local port=$2
+    print_hack "Testing Database on $target:$port..."
+    # Placeholder: Add actual DB checks (MySQL, Postgres, MSSQL)
+}
+
+#################################################
+# Phase 4: Vulnerability Scan
+#################################################
+vuln_scan() {
+    print_info "Running vulnerability scan..."
+    log_message "Phase: Vulnerability Scan"
+    nmap --script vuln "$TARGET" -oN "${RESULTS_DIR}/vulns.txt"
+}
+
+#################################################
+# Phase 5: Report Generation
+#################################################
+generate_report() {
+    print_info "Generating final report..."
+    log_message "Phase: Report Generation"
+
+    report_file="${REPORTS_DIR}/report_${TIMESTAMP}.txt"
+    echo -e "SOMBRA Reconnaissance Report\n==========================\n" > "$report_file"
+    cat "${RESULTS_DIR}/ports.txt" >> "$report_file"
+    cat "${RESULTS_DIR}/services.txt" >> "$report_file"
+    [[ -f "${RESULTS_DIR}/vulns.txt" ]] && cat "${RESULTS_DIR}/vulns.txt" >> "$report_file"
+    print_success "Report saved to $report_file"
+}
+
+#################################################
+# Argument Parsing
+#################################################
+if [[ $# -lt 1 ]]; then
     show_help
     exit 1
 fi
 
-# Set trap for cleanup
-trap cleanup EXIT
+TARGET="$1"
+shift
 
-# Main execution flow
-print_hack "💜 SOMBRA v2.0 - Initiating infiltration protocols..."
-print_info "\"Apagando las luces...\" - Going dark"
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -a|--aggressive) AGGRESSIVE_MODE=true ;;
+        -s|--stealth) STEALTH_MODE=true ;;
+        -v|--verbose) VERBOSE=true ;;
+        --no-discovery) RUN_DISCOVERY=false ;;
+        --no-services) RUN_SERVICE_DETECTION=false ;;
+        --no-testing) RUN_SMART_TESTING=false ;;
+        --no-vulns) RUN_VULN_SCAN=false ;;
+        --no-report) RUN_REPORT=false ;;
+        --no-http) TEST_HTTP=false ;;
+        --no-ssh) TEST_SSH=false ;;
+        --no-ftp) TEST_FTP=false ;;
+        --no-smb) TEST_SMB=false ;;
+        --no-dns) TEST_DNS=false ;;
+        --no-database) TEST_DATABASE=false ;;
+        -o|--output-dir) shift; OUTPUT_DIR="$1" ;;
+        -h|--help) show_help; exit 0 ;;
+        *) print_warning "Unknown option $1" ;;
+    esac
+    shift
+done
 
-# Validate dependencies
-check_dependencies
+#################################################
+# Execution
+#################################################
+print_banner
+setup_directories
 
-# Validate CIDR notation
-if ! validate_cidr "$NETWORK"; then
-    exit 1
-fi
+$RUN_DISCOVERY && port_discovery
+$RUN_SERVICE_DETECTION && service_detection
+$RUN_SMART_TESTING && smart_testing
+$RUN_VULN_SCAN && vuln_scan
+$RUN_REPORT && generate_report
 
-# Setup output directory
-setup_output_dir
-
-# Perform host discovery
-if discover_hosts "$NETWORK"; then
-    process_results "$NETWORK"
-else
-    print_error "Host discovery failed"
-    exit 1
-fi
+print_success "SOMBRA reconnaissance completed!"
