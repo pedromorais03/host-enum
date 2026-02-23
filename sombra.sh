@@ -2,11 +2,11 @@
 
 #################################################
 # 💜 SOMBRA - Reconnaissance Orchestrator v3.0
-# Author: [Seu Nome]
+# Author: Pedro Morais
 # Description: Intelligent reconnaissance automation
 # Usage: ./sombra.sh <target> [options]
 #################################################
-
+s
 readonly RED='\033[0;31m'
 readonly GREEN='\033[0;32m'
 readonly YELLOW='\033[1;33m'
@@ -73,11 +73,11 @@ get_service_test() {
 #################################################
 print_banner() {
     echo -e "${PURPLE}\
-   ███████  ██████  ███    ███ ██████  ██████   █████  
-   ██      ██    ██ ████  ████ ██   ██ ██   ██ ██   ██ 
-   ███████ ██    ██ ██ ████ ██ ██████  ██████  ███████ 
-        ██ ██    ██ ██  ██  ██ ██   ██ ██   ██ ██   ██ 
-   ███████  ██████  ██      ██ ██████  ██   ██ ██   ██ 
+   ███████  ██████  ███    ███ ██████  ██████   █████
+   ██      ██    ██ ████  ████ ██   ██ ██   ██ ██   ██
+   ███████ ██    ██ ██ ████ ██ ██████  ██████  ███████
+        ██ ██    ██ ██  ██  ██ ██   ██ ██   ██ ██   ██
+   ███████  ██████  ██      ██ ██████  ██   ██ ██   ██
    R E C O N N A I S S A N C E   O R C H E S T R A T O R${NC}
 ${CYAN}\"Heh, did I scare you?\"${NC}\n"
 }
